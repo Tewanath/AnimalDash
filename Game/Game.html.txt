@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Animal Dash - Forest Runner V4</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; background-color: #87CEEB; touch-action: none;
+            font-family: 'Kanit', sans-serif;
+        }
+        #game-canvas { display: block; width: 100%; height: 100%; }
+        
+        .ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+        }
+        .interactive { pointer-events: auto; }
+        
+        .btn-play {
+            background: linear-gradient(to bottom, #4ade80, #22c55e);
+            box-shadow: 0 6px 0 #166534, 0 10px 20px rgba(0,0,0,0.3);
+            transition: all 0.1s;
+        }
+        .btn-play:active { transform: translateY(4px); box-shadow: 0 2px 0 #166534, 0 4px 10px rgba(0,0,0,0.3); }
+        
+        .btn-home {
+            background: linear-gradient(to bottom, #60a5fa, #3b82f6);
+            box-shadow: 0 6px 0 #1e3a8a, 0 10px 20px rgba(0,0,0,0.3);
+            transition: all 0.1s;
+        }
+        .btn-home:active { transform: translateY(4px); box-shadow: 0 2px 0 #1e3a8a, 0 4px 10px rgba(0,0,0,0.3); }
+
+        .char-btn.selected {
+            border-color: #f97316; /* orange-500 */
+            background-color: #fff7ed; /* orange-50 */
+            transform: scale(1.1);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container" class="w-full h-full"></div>
+
+    <div id="hud" class="absolute top-4 left-4 flex items-center space-x-4 hidden">
+        <div class="bg-white/90 backdrop-blur-sm px-4 py-2 rounded-2xl shadow-lg font-bold text-xl text-yellow-600 flex items-center border-2 border-yellow-400">
+            <span class="mr-2 text-2xl">🪙</span> <span id="score-display">0</span>
+        </div>
+        <div class="bg-white/90 backdrop-blur-sm px-4 py-2 rounded-2xl shadow-lg font-bold text-xl text-blue-600 flex items-center border-2 border-blue-400">
+            <span class="mr-2 text-2xl">🏃</span> <span id="distance-display">0</span>m
+        </div>
+        <!-- เพิ่ม HUD แจ้งจำนวนการชนของน้องช้าง 🐘 -->
+        <div id="smash-hud" class="bg-white/90 backdrop-blur-sm px-4 py-2 rounded-2xl shadow-lg font-bold text-xl text-gray-600 flex items-center border-2 border-gray-400 hidden">
+            <span class="mr-2 text-2xl">🐘</span> พุ่งชน: <span id="smash-display" class="ml-2">20</span>
+        </div>
+    </div>
+
+    <div id="start-screen" class="ui-layer bg-black/40 backdrop-blur-sm z-10 interactive">
+        <div class="bg-white p-6 rounded-3xl shadow-2xl text-center max-w-md w-[90%] border-4 border-orange-400">
+            <div class="text-5xl mb-2">🐾🌲</div>
+            <h1 class="text-4xl font-extrabold text-orange-500 mb-2">Animal Dash</h1>
+            
+            <div class="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-2 mb-3 text-center">
+                <p class="text-yellow-600 font-bold text-xs">🏆 สถิติสูงสุด 🏆</p>
+                <div class="flex justify-center space-x-4 mt-1 text-sm font-bold text-gray-700">
+                    <p>🪙 <span id="best-score-display">0</span></p>
+                    <p>🏃 <span id="best-dist-display">0</span>m</p>
+                </div>
+            </div>
+            
+            <!-- เปลี่ยนจากปุ่มเลือกตัวละคร เป็นปุ่มเข้าห้อง Avatar แทน -->
+            <button id="go-avatar-btn" class="interactive btn-home text-white font-bold text-lg py-2 px-10 rounded-full w-full mb-4 flex items-center justify-center">
+                <span class="mr-2 text-2xl">👤</span> เลือกตัวละคร (Avatar)
+            </button>
+
+            <button id="start-btn" class="interactive btn-play text-white font-bold text-xl py-3 px-10 rounded-full w-full">
+                START GAME
+            </button>
+        </div>
+    </div>
+
+    <!-- หน้าต่างห้อง Avatar Room (ใหม่ล่าสุด!) -->
+    <div id="avatar-screen" class="absolute top-0 left-0 w-full h-full z-30 hidden flex flex-col md:flex-row pointer-events-none">
+        <!-- ฝั่งซ้าย (3D โชว์ตัวละคร จะโปร่งใสเพื่อให้มองเห็น Canvas ด้านหลัง) -->
+        <div class="w-full md:w-1/2 h-[40%] md:h-full flex items-end md:items-center justify-center pb-4 md:pb-0">
+            <!-- ปล่อยว่างไว้ให้เห็น Three.js ด้านหลัง -->
+        </div>
+
+        <!-- ฝั่งขวา (UI เลือกตัวละคร) -->
+        <div class="w-full md:w-1/2 h-[60%] md:h-full bg-white/95 backdrop-blur-lg flex flex-col justify-center p-8 shadow-[-10px_0_30px_rgba(0,0,0,0.1)] rounded-t-[3rem] md:rounded-t-none md:rounded-l-[3rem] interactive border-t-4 md:border-t-0 md:border-l-4 border-orange-300">
+            <h2 class="text-4xl font-extrabold text-orange-500 mb-2 text-center md:text-left">AVATAR</h2>
+            <p class="text-gray-500 mb-6 font-medium text-center md:text-left">เลือกสัตว์เลี้ยงคู่ใจของคุณ</p>
+            
+            <!-- Grid ปุ่มตัวละคร -->
+            <div class="grid grid-cols-3 gap-3 mb-6">
+                <button class="char-btn text-4xl p-3 rounded-2xl border-4 bg-white transition-all shadow-sm selected flex items-center justify-center hover:scale-105 hover:shadow-md" data-char="fox">🦊</button>
+                <button class="char-btn text-4xl p-3 rounded-2xl border-2 border-gray-200 bg-white transition-all shadow-sm flex items-center justify-center hover:scale-105 hover:shadow-md" data-char="dog">🐶</button>
+                <button class="char-btn text-4xl p-3 rounded-2xl border-2 border-gray-200 bg-white transition-all shadow-sm flex items-center justify-center hover:scale-105 hover:shadow-md" data-char="cat">🐱</button>
+                <button class="char-btn text-4xl p-3 rounded-2xl border-2 border-gray-200 bg-white transition-all shadow-sm flex items-center justify-center hover:scale-105 hover:shadow-md" data-char="chicken">🐔</button>
+                <button class="char-btn text-4xl p-3 rounded-2xl border-2 border-gray-200 bg-white transition-all shadow-sm flex items-center justify-center hover:scale-105 hover:shadow-md" data-char="mouse">🐭</button>
+                
+                <!-- ปุ่มช้าง ปรับให้แสดงหลอดสะสมเหรียญ -->
+                <button id="elephant-btn" class="text-xl p-2 rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50 flex flex-col items-center justify-center transition-all relative overflow-hidden group" data-char="elephant">
+                    <span id="elephant-icon" class="text-3xl opacity-50 mb-1">🔒</span>
+                    <div class="w-full bg-gray-200 rounded-full h-2 mb-1 w-10">
+                        <div id="elephant-progress-bar" class="bg-yellow-400 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                    <span id="elephant-progress-text" class="text-[10px] font-bold text-gray-500">0/250</span>
+                </button>
+            </div>
+            
+            <div class="bg-orange-50 rounded-xl p-4 mb-8 border-2 border-orange-100 min-h-[5rem] flex items-center justify-center">
+                <p id="char-desc" class="text-sm font-semibold text-center text-orange-800">จิ้งจอก (Fox) - สมดุลกระโดดและก้มได้</p>
+            </div>
+
+            <button id="back-main-btn" class="interactive btn-home text-white font-bold text-xl py-3 px-10 rounded-full w-full">
+                🔙 กลับหน้าหลัก
+            </button>
+        </div>
+    </div>
+
+    <div id="game-over-screen" class="ui-layer bg-red-900/60 backdrop-blur-md z-20 hidden interactive">
+        <div class="bg-white p-6 rounded-3xl shadow-2xl text-center max-w-md w-[90%] border-4 border-red-500">
+            <div class="text-6xl mb-2">💥</div>
+            <h1 class="text-4xl font-extrabold text-red-600 mb-2">GAME OVER</h1>
+            
+            <div class="flex justify-center space-x-6 mb-4">
+                <div class="text-center">
+                    <p class="text-gray-500 text-sm">เหรียญ</p>
+                    <p class="text-3xl font-bold text-yellow-500">🪙 <span id="final-coins">0</span></p>
+                </div>
+                <div class="text-center">
+                    <p class="text-gray-500 text-sm">ระยะทาง</p>
+                    <p class="text-3xl font-bold text-blue-500">🏃 <span id="final-dist">0</span>m</p>
+                </div>
+            </div>
+
+            <div class="bg-red-50 border-2 border-red-200 rounded-xl p-2 mb-4 text-center text-xs text-gray-700 font-medium">
+                <p class="font-bold mb-1 text-red-600">สถิติการชนสะสม</p>
+                <div class="flex justify-around">
+                    <p>🪨 หิน: <span id="stats-rock">0</span></p>
+                    <p>🕳️ หลุม: <span id="stats-pit">0</span></p>
+                    <p>🌿 เถาวัลย์: <span id="stats-vine">0</span></p>
+                </div>
+            </div>
+
+            <div id="new-record-badge" class="hidden bg-yellow-400 text-white font-bold py-1 px-4 rounded-full mb-4 animate-pulse">
+                🎉 สถิติใหม่! 🎉
+            </div>
+
+            <div class="flex flex-col space-y-2">
+                <button id="restart-btn" class="interactive btn-play text-white font-bold text-lg py-3 px-10 rounded-full w-full">
+                    🔄 PLAY AGAIN
+                </button>
+                <button id="home-btn" class="interactive btn-home text-white font-bold text-lg py-3 px-10 rounded-full w-full">
+                    🏠 MAIN MENU
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const AudioSys = {
+            ctx: null, isPlayingBGM: false,
+            init: function() {
+                if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+            },
+            playSound: function(type) {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.connect(gain); gain.connect(this.ctx.destination);
+                const now = this.ctx.currentTime;
+                
+                if (type === 'jump') { osc.type = 'sine'; osc.frequency.setValueAtTime(400, now); osc.frequency.exponentialRampToValueAtTime(800, now + 0.2); gain.gain.setValueAtTime(0.3, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2); osc.start(now); osc.stop(now + 0.2); } 
+                else if (type === 'duck') { osc.type = 'triangle'; osc.frequency.setValueAtTime(400, now); osc.frequency.exponentialRampToValueAtTime(200, now + 0.2); gain.gain.setValueAtTime(0.3, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2); osc.start(now); osc.stop(now + 0.2); }
+                else if (type === 'coin') { osc.type = 'square'; osc.frequency.setValueAtTime(987.77, now); osc.frequency.setValueAtTime(1318.51, now + 0.05); gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0, now + 0.15); osc.start(now); osc.stop(now + 0.15); }
+                else if (type === 'crash') { osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, now); osc.frequency.exponentialRampToValueAtTime(20, now + 0.3); gain.gain.setValueAtTime(0.4, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3); osc.start(now); osc.stop(now + 0.3); }
+            },
+            playBGM: function() {
+                if (!this.ctx || this.isPlayingBGM) return;
+                this.isPlayingBGM = true;
+                const notes = [261.63, 329.63, 392.00, 523.25]; let noteIndex = 0;
+                const playNextNote = () => {
+                    if (!this.isPlayingBGM) return;
+                    const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
+                    osc.type = 'sine'; osc.frequency.value = notes[noteIndex];
+                    osc.connect(gain); gain.connect(this.ctx.destination);
+                    const now = this.ctx.currentTime;
+                    gain.gain.setValueAtTime(0.05, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+                    osc.start(now); osc.stop(now + 0.2);
+                    noteIndex = (noteIndex + 1) % notes.length;
+                    this.bgmTimeout = setTimeout(playNextNote, 200);
+                };
+                playNextNote();
+            },
+            stopBGM: function() { this.isPlayingBGM = false; if(this.bgmTimeout) clearTimeout(this.bgmTimeout); }
+        };
+
+        let scene, camera, renderer, playerGroup;
+        let gameObjects = []; // เก็บเหรียญและอุปสรรค
+        let envObjects = []; // ต้นไม้ประกอบฉาก
+        let pedestal; // แท่นยืนโชว์ตัวละคร
+        
+        let isGameRunning = false;
+        let isInAvatarRoom = false; // เช็คสถานะว่าอยู่ในห้องเลือกตัวละครหรือไม่
+        let score = 0, distance = 0, gameSpeed = 0.4;
+        const BASE_SPEED = 0.4;
+        
+        const LANE_WIDTH = 2;
+        let currentLane = 0; // -1 (ซ้าย), 0 (กลาง), 1 (ขวา)
+        let targetX = 0;
+        
+        // ฟิสิกส์
+        let velocityY = 0;
+        const gravity = -0.025; // ตกไวขึ้น ไม่ลอยค้าง
+        let isJumping = false, isDucking = false, duckTimeout;
+        let jumpCount = 0; // เพิ่มตัวแปรนับจำนวนครั้งการกระโดด
+
+        let spawnTimer = 0, coinPatternTimer = 0, treeSpawnTimer = 0;
+
+        // ระบบสีสำหรับกลางวัน/กลางคืน
+        const DAY_COLORS = { sky: 0x87CEEB, fog: 0x87CEEB };
+        const TWILIGHT_COLORS = { sky: 0xFF8C00, fog: 0x554433 };
+        const NIGHT_COLORS = { sky: 0x1a2a6c, fog: 0x1a2a6c };
+        const CYCLE_DIST = 200; // เปลี่ยนครบ 1 รอบทุกๆ 200 เมตร (จากเดิม 1000)
+
+        let bestScore = localStorage.getItem('animalDashBestScore') || 0;
+        let bestDist = localStorage.getItem('animalDashBestDist') || 0;
+        let totalCoins = parseInt(localStorage.getItem('animalDashTotalCoins')) || 0; // เพิ่มตัวแปรเก็บเหรียญรวม!
+        let currentSmashCount = 0; // นับจำนวนที่ช้างชนไปแล้ว
+
+        let stats = {
+            rock: parseInt(localStorage.getItem('animalDashStatsRock')) || 0,
+            pit: parseInt(localStorage.getItem('animalDashStatsPit')) || 0,
+            vine: parseInt(localStorage.getItem('animalDashStatsVine')) || 0
+        };
+
+        const CHAR_CONFIG = {
+            fox: { name: 'จิ้งจอก (Fox) - สมดุลกระโดดและก้มได้', jumpPower: 0.28, canDuck: true, scale: 1.0, maxJumps: 1, gravityScale: 1.0 },
+            dog: { name: 'หมาโฮ่ง (Dog) - สมดุลกระโดดและก้มได้', jumpPower: 0.28, canDuck: true, scale: 1.0, maxJumps: 1, gravityScale: 1.0 },
+            cat: { name: 'แมวเหมียว (Cat) - สมดุลกระโดดและก้มได้', jumpPower: 0.28, canDuck: true, scale: 1.0, maxJumps: 1, gravityScale: 1.0 },
+            chicken: { name: 'ไก่กุ๊ก (Chicken) - โดดได้ 2 จังหวะ! และร่อนลงพื้นช้าลง', jumpPower: 0.24, canDuck: true, scale: 0.9, maxJumps: 2, gravityScale: 0.55 },
+            mouse: { name: 'หนูจี๊ด (Mouse) - ตัวเล็กก้มไม่ได้ ลอดเถาวัลย์ได้เลย โดดสูง!', jumpPower: 0.38, canDuck: false, scale: 0.5, maxJumps: 1, gravityScale: 1.0 },
+            elephant: { name: 'ช้างล่ำ (Elephant) - ชนหิน/เถาวัลย์ได้ 20 ครั้ง! (กระโดดและก้มไม่ได้)', jumpPower: 0, canDuck: false, scale: 1.2, maxJumps: 0, gravityScale: 1.0, maxSmash: 20 }
+        };
+        let selectedChar = 'fox';
+
+        window.onload = function() {
+            updateHighScoreDisplay();
+            updateStatsDisplay();
+            updateUnlockProgress(); // อัปเดต UI ช้างตอนโหลดเข้าเกม
+            initThreeJS();
+            setupEvents();
+            animate();
+        };
+
+        function updateHighScoreDisplay() {
+            document.getElementById('best-score-display').innerText = bestScore;
+            document.getElementById('best-dist-display').innerText = bestDist;
+        }
+
+        function updateStatsDisplay() {
+            document.getElementById('stats-rock').innerText = stats.rock;
+            document.getElementById('stats-pit').innerText = stats.pit;
+            document.getElementById('stats-vine').innerText = stats.vine;
+        }
+
+        // ระบบตรวจสอบและอัปเดตการปลดล็อคช้าง
+        function updateUnlockProgress() {
+            const btn = document.getElementById('elephant-btn');
+            const icon = document.getElementById('elephant-icon');
+            const bar = document.getElementById('elephant-progress-bar');
+            const text = document.getElementById('elephant-progress-text');
+            
+            const targetCoins = 250;
+            let current = totalCoins > targetCoins ? targetCoins : totalCoins;
+            let percent = (current / targetCoins) * 100;
+            
+            bar.style.width = percent + '%';
+            text.innerText = current + '/' + targetCoins;
+
+            if (totalCoins >= targetCoins) {
+                icon.innerText = '🐘';
+                icon.classList.remove('opacity-50', 'text-3xl');
+                icon.classList.add('text-4xl'); // ปรับขนาดอีโมจิให้เท่าตัวอื่น
+                btn.classList.remove('border-dashed', 'bg-gray-50');
+                btn.classList.add('char-btn', 'bg-white', 'border-gray-200', 'cursor-pointer', 'hover:scale-105', 'shadow-sm');
+                text.innerText = 'ปลดล็อคแล้ว!';
+                text.classList.replace('text-gray-500', 'text-green-600');
+                bar.classList.replace('bg-yellow-400', 'bg-green-500');
+            } else {
+                btn.classList.remove('char-btn');
+            }
+        }
+
+        // ระบบเปลี่ยนสีฉากตามระยะทาง
+        function updateDayNightCycle() {
+            const cycleDist = 500;
+            const currentDist = distance % cycleDist;
+
+            let targetSky, targetFog;
+
+            if (currentDist < 100) { // เช้า
+                targetSky = new THREE.Color(DAY_COLORS.sky);
+                targetFog = new THREE.Color(DAY_COLORS.fog);
+            } else if (currentDist < 250) { // กลางวัน
+                targetSky = new THREE.Color(DAY_COLORS.sky);
+                targetFog = new THREE.Color(DAY_COLORS.fog);
+            } else if (currentDist < 350) { // พลบค่ำ (ค่อยๆ เปลี่ยนไปกลางคืน)
+                let t = (currentDist - 250) / 100;
+                targetSky = new THREE.Color(DAY_COLORS.sky).lerp(new THREE.Color(NIGHT_COLORS.sky), t);
+                targetFog = new THREE.Color(DAY_COLORS.fog).lerp(new THREE.Color(NIGHT_COLORS.fog), t);
+            } else { // กลางคืน
+                targetSky = new THREE.Color(NIGHT_COLORS.sky);
+                targetFog = new THREE.Color(NIGHT_COLORS.fog);
+            }
+
+            scene.background.lerp(targetSky, 0.05);
+            scene.fog.color.lerp(targetFog, 0.05);
+        }
+
+        function initThreeJS() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB); 
+            scene.fog = new THREE.Fog(0x87CEEB, 30, 90); 
+            
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 150);
+            camera.position.set(0, 5, -9); 
+            camera.lookAt(0, 0, 15);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            container.appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(-10, 20, -10);
+            dirLight.castShadow = true;
+            scene.add(dirLight);
+
+            createEnvironment();
+            buildCharacter(selectedChar); // สร้างตัวละครที่เลือกเริ่มต้น
+        }
+
+        function createEnvironment() {
+            // เส้นทางดิน
+            const pathGeo = new THREE.PlaneGeometry(6, 250);
+            const pathMat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+            const path = new THREE.Mesh(pathGeo, pathMat);
+            path.rotation.x = -Math.PI / 2;
+            path.position.z = 50;
+            path.receiveShadow = true;
+            scene.add(path);
+
+            // พื้นหญ้า
+            const grassGeo = new THREE.PlaneGeometry(100, 250);
+            const grassMat = new THREE.MeshLambertMaterial({ color: 0x228B22 });
+            const leftGrass = new THREE.Mesh(grassGeo, grassMat);
+            leftGrass.rotation.x = -Math.PI / 2; leftGrass.position.set(-53, -0.1, 50); leftGrass.receiveShadow = true; scene.add(leftGrass);
+            const rightGrass = new THREE.Mesh(grassGeo, grassMat);
+            rightGrass.rotation.x = -Math.PI / 2; rightGrass.position.set(53, -0.1, 50); rightGrass.receiveShadow = true; scene.add(rightGrass);
+
+            // เส้นขอบเลน
+            const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3 });
+            for(let i = -1; i <= 1; i+=2) {
+                const lineGeo = new THREE.PlaneGeometry(0.1, 250);
+                const line = new THREE.Mesh(lineGeo, lineMat);
+            line.rotation.x = -Math.PI / 2; line.position.set(i * (LANE_WIDTH/2), 0.01, 50); scene.add(line);
+        }
+
+        // สร้างแท่นยืนโชว์ตัวละคร (Avatar Pedestal)
+        const pedGeo = new THREE.CylinderGeometry(1.5, 1.8, 0.2, 32);
+        const pedMat = new THREE.MeshLambertMaterial({ color: 0xFFD700 }); // สีทองสว่าง
+        pedestal = new THREE.Mesh(pedGeo, pedMat);
+        pedestal.position.set(0, -0.1, 0);
+        pedestal.receiveShadow = true;
+        pedestal.visible = false; // ซ่อนไว้ก่อน จะโชว์ตอนเข้าห้อง Avatar
+        scene.add(pedestal);
+        
+        // ขอบแท่นยืน
+        const rimGeo = new THREE.TorusGeometry(1.6, 0.05, 16, 32);
+        const rimMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const rim = new THREE.Mesh(rimGeo, rimMat);
+        rim.rotation.x = Math.PI / 2;
+        pedestal.add(rim);
+    }
+
+        function spawnTree() {
+            const isLeft = Math.random() > 0.5;
+            const xPos = isLeft ? (-4 - Math.random()*5) : (4 + Math.random()*5);
+            const tree = new THREE.Group();
+            
+            const trunkGeo = new THREE.CylinderGeometry(0.3, 0.4, 2);
+            const trunkMat = new THREE.MeshLambertMaterial({ color: 0x5C4033 });
+            const trunk = new THREE.Mesh(trunkGeo, trunkMat); trunk.position.y = 1;
+            
+            const leavesGeo = new THREE.ConeGeometry(1.8, 4, 5);
+            const leavesMat = new THREE.MeshLambertMaterial({ color: 0x006400 });
+            const leaves = new THREE.Mesh(leavesGeo, leavesMat); leaves.position.y = 3.5;
+            
+            tree.add(trunk); tree.add(leaves); tree.position.set(xPos, 0, 100);
+            scene.add(tree); envObjects.push(tree);
+        }
+
+        function buildCharacter(type) {
+            // จำตำแหน่งและการหมุนเดิมไว้ก่อนลบตัวละครเก่า
+            let oldPos = new THREE.Vector3(0, 0, 0);
+            let oldRot = new THREE.Euler(0, 0, 0);
+            if (playerGroup) {
+                oldPos.copy(playerGroup.position);
+                oldRot.copy(playerGroup.rotation);
+                scene.remove(playerGroup);
+            }
+            playerGroup = new THREE.Group();
+
+            const c = CHAR_CONFIG[type];
+            let matBody, matSec, matDark = new THREE.MeshLambertMaterial({color: 0x222222});
+            
+            // ชิ้นส่วนพื้นฐาน
+            let bodyGeo, headGeo, snoutGeo;
+
+            if (type === 'fox') {
+                matBody = new THREE.MeshLambertMaterial({color: 0xFF7F50});
+                matSec = new THREE.MeshLambertMaterial({color: 0xFFFFFF});
+                // ตัว
+                bodyGeo = new THREE.BoxGeometry(0.8, 0.6, 1.2); 
+                const body = new THREE.Mesh(bodyGeo, matBody); body.position.y = 0.6; playerGroup.add(body);
+                // หัว
+                headGeo = new THREE.BoxGeometry(0.9, 0.8, 0.8);
+                const head = new THREE.Mesh(headGeo, matBody); head.position.set(0, 1.1, 0.4); playerGroup.add(head);
+                // จมูก
+                const snout = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.4, 0.4), matSec); snout.position.set(0, 0.9, 0.9); playerGroup.add(snout);
+                const nose = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), matDark); nose.position.set(0, 1.0, 1.1); playerGroup.add(nose);
+                // หู
+                const earGeo = new THREE.BoxGeometry(0.3, 0.4, 0.2);
+                const earL = new THREE.Mesh(earGeo, matBody); earL.position.set(-0.3, 1.6, 0.4); playerGroup.add(earL);
+                const earR = new THREE.Mesh(earGeo, matBody); earR.position.set(0.3, 1.6, 0.4); playerGroup.add(earR);
+                // หาง
+                const tail = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 1.0), matBody); tail.position.set(0, 0.7, -0.8); tail.rotation.x = Math.PI/6; playerGroup.add(tail);
+            } 
+            else if (type === 'dog') {
+                matBody = new THREE.MeshLambertMaterial({color: 0x8B4513});
+                matSec = new THREE.MeshLambertMaterial({color: 0xDEB887});
+                bodyGeo = new THREE.BoxGeometry(0.9, 0.7, 1.1); 
+                const body = new THREE.Mesh(bodyGeo, matBody); body.position.y = 0.65; playerGroup.add(body);
+                headGeo = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+                const head = new THREE.Mesh(headGeo, matBody); head.position.set(0, 1.1, 0.4); playerGroup.add(head);
+                const snout = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 0.5), matSec); snout.position.set(0, 0.9, 0.9); playerGroup.add(snout);
+                const nose = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), matDark); nose.position.set(0, 1.0, 1.1); playerGroup.add(nose);
+                // หูพับตก
+                const earGeo = new THREE.BoxGeometry(0.2, 0.5, 0.4);
+                const earL = new THREE.Mesh(earGeo, matDark); earL.position.set(-0.45, 1.1, 0.3); earL.rotation.z = Math.PI/8; playerGroup.add(earL);
+                const earR = new THREE.Mesh(earGeo, matDark); earR.position.set(0.45, 1.1, 0.3); earR.rotation.z = -Math.PI/8; playerGroup.add(earR);
+                const tail = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.6), matBody); tail.position.set(0, 0.8, -0.8); tail.rotation.x = Math.PI/4; playerGroup.add(tail);
+            }
+            else if (type === 'cat') {
+                matBody = new THREE.MeshLambertMaterial({color: 0xFFB6C1}); // แมวสีชมพูอ่อน
+                matSec = new THREE.MeshLambertMaterial({color: 0xFFFFFF});
+                bodyGeo = new THREE.BoxGeometry(0.7, 0.6, 1.0); 
+                const body = new THREE.Mesh(bodyGeo, matBody); body.position.y = 0.6; playerGroup.add(body);
+                headGeo = new THREE.BoxGeometry(0.8, 0.7, 0.7);
+                const head = new THREE.Mesh(headGeo, matBody); head.position.set(0, 1.1, 0.3); playerGroup.add(head);
+                const snout = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.3, 0.2), matSec); snout.position.set(0, 0.9, 0.7); playerGroup.add(snout);
+                // หูแหลมเล็ก
+                const earGeo = new THREE.ConeGeometry(0.2, 0.4, 4);
+                const earL = new THREE.Mesh(earGeo, matBody); earL.position.set(-0.25, 1.5, 0.3); playerGroup.add(earL);
+                const earR = new THREE.Mesh(earGeo, matBody); earR.position.set(0.25, 1.5, 0.3); playerGroup.add(earR);
+                // หางเรียวยาวชี้ขึ้น
+                const tail = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 1.2), matBody); tail.position.set(0, 1.0, -0.8); tail.rotation.x = Math.PI/3; playerGroup.add(tail);
+            }
+            else if (type === 'chicken') {
+                matBody = new THREE.MeshLambertMaterial({color: 0xFFFFFF});
+                matSec = new THREE.MeshLambertMaterial({color: 0xFF0000}); // หงอนแดง
+                const matBeak = new THREE.MeshLambertMaterial({color: 0xFFD700}); // ปากเหลือง
+                bodyGeo = new THREE.BoxGeometry(0.8, 0.9, 0.9); 
+                const body = new THREE.Mesh(bodyGeo, matBody); body.position.set(0, 0.7, 0); playerGroup.add(body);
+                // หงอนไก่
+                const comb = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.3, 0.5), matSec); comb.position.set(0, 1.3, 0); playerGroup.add(comb);
+                // ปากไก่
+                const beak = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.4, 4), matBeak); beak.position.set(0, 0.9, 0.6); beak.rotation.x = Math.PI/2; playerGroup.add(beak);
+                // ปีก
+                const wing = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.5, 0.6), matBody); 
+                const wingL = wing.clone(); wingL.position.set(-0.45, 0.7, 0); playerGroup.add(wingL);
+                const wingR = wing.clone(); wingR.position.set(0.45, 0.7, 0); playerGroup.add(wingR);
+                
+                // บันทึกปีกไก่ไว้สำหรับทำแอนิเมชันกระพือปีก
+                playerGroup.userData.isChicken = true;
+                playerGroup.userData.wingL = wingL;
+                playerGroup.userData.wingR = wingR;
+            }
+            else if (type === 'mouse') {
+                matBody = new THREE.MeshLambertMaterial({color: 0x808080}); // สีเทา
+                matSec = new THREE.MeshLambertMaterial({color: 0xFFC0CB}); // สีชมพู
+                bodyGeo = new THREE.BoxGeometry(0.7, 0.5, 1.0); 
+                const body = new THREE.Mesh(bodyGeo, matBody); body.position.y = 0.5; playerGroup.add(body);
+                headGeo = new THREE.BoxGeometry(0.6, 0.5, 0.6);
+                const head = new THREE.Mesh(headGeo, matBody); head.position.set(0, 0.8, 0.6); playerGroup.add(head);
+                const snout = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.2, 0.3), matBody); snout.position.set(0, 0.7, 0.9); playerGroup.add(snout);
+                const nose = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), matSec); nose.position.set(0, 0.75, 1.05); playerGroup.add(nose);
+                // หูกลมใหญ่
+                const earGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.1, 16);
+                const earL = new THREE.Mesh(earGeo, matBody); earL.position.set(-0.35, 1.0, 0.5); earL.rotation.x = Math.PI/2; earL.rotation.y = Math.PI/8; playerGroup.add(earL);
+                const earR = new THREE.Mesh(earGeo, matBody); earR.position.set(0.35, 1.0, 0.5); earR.rotation.x = Math.PI/2; earR.rotation.y = -Math.PI/8; playerGroup.add(earR);
+                // หางเส้นเล็กยาว
+                const tail = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 1.8), matSec); tail.position.set(0, 0.5, -1.0); tail.rotation.x = Math.PI/8; playerGroup.add(tail);
+            }
+            else if (type === 'elephant') {
+                matBody = new THREE.MeshLambertMaterial({color: 0x708090}); // สีเทาช้าง
+                matSec = new THREE.MeshLambertMaterial({color: 0xFFFFFF}); // สีงาช้าง
+                // ตัวอ้วนกลม
+                bodyGeo = new THREE.BoxGeometry(1.2, 1.0, 1.4); 
+                const body = new THREE.Mesh(bodyGeo, matBody); body.position.y = 0.7; playerGroup.add(body);
+                // หัว
+                headGeo = new THREE.BoxGeometry(1.0, 0.9, 1.0);
+                const head = new THREE.Mesh(headGeo, matBody); head.position.set(0, 1.1, 0.6); playerGroup.add(head);
+                // งวงยาวๆ (Trunk)
+                const trunkGeo = new THREE.BoxGeometry(0.3, 0.8, 0.3);
+                const trunk = new THREE.Mesh(trunkGeo, matBody); trunk.position.set(0, 0.6, 1.15); trunk.rotation.x = -Math.PI/8; playerGroup.add(trunk);
+                // งาช้าง (Tusks)
+                const tuskGeo = new THREE.ConeGeometry(0.08, 0.5, 8);
+                const tuskL = new THREE.Mesh(tuskGeo, matSec); tuskL.position.set(-0.25, 0.7, 1.1); tuskL.rotation.x = Math.PI/2.5; playerGroup.add(tuskL);
+                const tuskR = new THREE.Mesh(tuskGeo, matSec); tuskR.position.set(0.25, 0.7, 1.1); tuskR.rotation.x = Math.PI/2.5; playerGroup.add(tuskR);
+                // หูใหญ่ๆ (Ears)
+                const earGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.1, 16);
+                const earL = new THREE.Mesh(earGeo, matBody); earL.position.set(-0.6, 1.1, 0.5); earL.rotation.z = Math.PI/2; earL.rotation.y = -Math.PI/6; playerGroup.add(earL);
+                const earR = new THREE.Mesh(earGeo, matBody); earR.position.set(0.6, 1.1, 0.5); earR.rotation.z = Math.PI/2; earR.rotation.y = Math.PI/6; playerGroup.add(earR);
+                // หางเล็กๆ
+                const tail = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 0.1), matBody); tail.position.set(0, 0.8, -0.8); tail.rotation.x = Math.PI/8; playerGroup.add(tail);
+            }
+
+            // ขา 4 ข้าง (สำหรับทุกตัว)
+            const legGeo = new THREE.BoxGeometry(0.2, 0.4, 0.2);
+            const legMat = new THREE.MeshLambertMaterial({ color: (type === 'chicken') ? 0xFFD700 : 0x222222 });
+            const legFL = new THREE.Mesh(legGeo, legMat); legFL.position.set(-0.25, 0.2, 0.3); playerGroup.add(legFL);
+            const legFR = new THREE.Mesh(legGeo, legMat); legFR.position.set(0.25, 0.2, 0.3); playerGroup.add(legFR);
+            if (type !== 'chicken') { // ไก่มีแค่ 2 ขา
+                const legBL = new THREE.Mesh(legGeo, legMat); legBL.position.set(-0.25, 0.2, -0.3); playerGroup.add(legBL);
+                const legBR = new THREE.Mesh(legGeo, legMat); legBR.position.set(0.25, 0.2, -0.3); playerGroup.add(legBR);
+            }
+
+            // เปิดให้มีเงา
+            playerGroup.traverse((child) => { if (child.isMesh) { child.castShadow = true; } });
+
+            // คืนค่าตำแหน่งและการหมุนเดิมให้ตัวใหม่ (จะได้ไม่กระตุกตอนสลับตัวละคร)
+            playerGroup.position.copy(oldPos);
+            playerGroup.rotation.copy(oldRot);
+
+            // ปรับขนาดตามสเกลที่ตั้งไว้ (หนูจะถูกย่อลง 50% ทำให้ลอดเถาวัลย์ได้)
+            playerGroup.scale.set(c.scale, c.scale, c.scale);
+            scene.add(playerGroup);
+        }
+
+        function isSpaceOccupied(lane, zPos, safeDistance) {
+            for (let obj of gameObjects) {
+                if (obj.lane === lane && Math.abs(obj.mesh.position.z - zPos) < safeDistance) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function spawnObstacle() {
+            const types = ['rock', 'pit', 'vine'];
+            const type = types[Math.floor(Math.random() * types.length)];
+            const lane = Math.floor(Math.random() * 3) - 1;
+            const xPos = lane * -LANE_WIDTH; 
+            const zPos = 120; 
+            
+            // เช็คทับซ้อน ปลอดภัยไว้ที่ระยะ 8
+            if (isSpaceOccupied(lane, zPos, 8)) return;
+
+            let mesh;
+            if (type === 'rock') {
+                const geo = new THREE.BoxGeometry(1.6, 2.5, 1.5);
+                const mat = new THREE.MeshLambertMaterial({ color: 0x808080 });
+                mesh = new THREE.Mesh(geo, mat); mesh.position.set(xPos, 1.25, zPos);
+                mesh.castShadow = true;
+            } 
+            else if (type === 'pit') {
+                const geo = new THREE.BoxGeometry(1.8, 0.1, 3);
+                const mat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+                mesh = new THREE.Mesh(geo, mat); mesh.position.set(xPos, 0.05, zPos);
+            }
+            else if (type === 'vine') {
+                // เถาวัลย์แบบใหม่: เป็นกลุ่มกระบอกห้อยลงมา
+                mesh = new THREE.Group();
+                const vineHeight = 2.4;
+                // ปรับแกน Y ให้ความสูงฐานของเถาวัลย์อยู่ระดับ 0.8 (หนูสูง 0.6 จะลอดได้พอดี)
+                const vineY = 0.8 + (vineHeight / 2); 
+                
+                // สร้างเส้นเถาวัลย์ 6 เส้น
+                for(let j = 0; j < 6; j++) {
+                    const cGeo = new THREE.CylinderGeometry(0.05, 0.05, vineHeight, 6);
+                    const cMat = new THREE.MeshLambertMaterial({ color: 0x2E8B57 });
+                    const c = new THREE.Mesh(cGeo, cMat);
+                    c.position.set(-0.8 + (j * 0.32), vineY, 0);
+                    c.rotation.z = (Math.random() - 0.5) * 0.2; // เอียงแบบสุ่มๆ
+                    
+                    // เพิ่มใบไม้ประดับให้เถาวัลย์
+                    const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.3, 4), cMat);
+                    leaf.position.set(0, (Math.random() - 0.5) * vineHeight, 0.1);
+                    leaf.rotation.x = Math.PI / 2;
+                    c.add(leaf);
+
+                    c.castShadow = true;
+                    mesh.add(c);
+                }
+
+                // สร้าง Hitbox แบบล่องหนเพื่อให้เช็คชนได้แม่นยำและง่ายขึ้น
+                const hitGeo = new THREE.BoxGeometry(1.8, vineHeight, 0.5);
+                const hitMat = new THREE.MeshBasicMaterial({visible: false});
+                const hitbox = new THREE.Mesh(hitGeo, hitMat);
+                hitbox.position.set(0, vineY, 0);
+                mesh.add(hitbox);
+
+                mesh.position.set(xPos, 0, zPos);
+            }
+
+            scene.add(mesh);
+            gameObjects.push({ mesh: mesh, type: type, isObstacle: true, lane: lane });
+        }
+
+        function spawnCoins() {
+            const lane = Math.floor(Math.random() * 3) - 1;
+            const xPos = lane * -LANE_WIDTH;
+            const numCoins = 5 + Math.floor(Math.random() * 3);
+            const startZ = 120;
+            const spacing = 2;
+
+            for (let i = 0; i < numCoins; i++) {
+                const coinZ = startZ + (i * spacing);
+                // ป้องกันเหรียญทับกับอุปสรรค
+                if (isSpaceOccupied(lane, coinZ, 4)) continue;
+
+                const geo = new THREE.CylinderGeometry(0.4, 0.4, 0.1, 16);
+                const mat = new THREE.MeshLambertMaterial({ color: 0xFFD700 });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.rotation.x = Math.PI / 2;
+                
+                const isHigh = Math.random() > 0.8; 
+                mesh.position.set(xPos, isHigh ? 2.5 : 0.6, coinZ);
+                mesh.castShadow = true; scene.add(mesh);
+                
+                gameObjects.push({ mesh: mesh, type: 'coin', isObstacle: false, rotationSpeed: 0.1, lane: lane });
+            }
+        }
+
+        function moveLeft() { if (currentLane > -1) { currentLane--; targetX = currentLane * -LANE_WIDTH; } }
+        function moveRight() { if (currentLane < 1) { currentLane++; targetX = currentLane * -LANE_WIDTH; } }
+
+        function jump() {
+            const config = CHAR_CONFIG[selectedChar];
+            // เช็คว่ากดกระโดดเกินโควต้าของแต่ละตัวหรือยัง
+            if (jumpCount < config.maxJumps && !isDucking) { 
+                isJumping = true; 
+                jumpCount++; // นับว่าโดดไปกี่ครั้งแล้ว
+                velocityY = config.jumpPower; 
+                AudioSys.playSound('jump'); 
+            }
+        }
+
+        function duck() {
+            const config = CHAR_CONFIG[selectedChar];
+            if (!config.canDuck) return; // หนูจี๊ดก้มไม่ได้!
+
+            if (!isJumping && !isDucking) {
+                isDucking = true; AudioSys.playSound('duck');
+                // บีบตัวลงตามสัดส่วนของตัวละครนั้นๆ
+                playerGroup.scale.set(config.scale, config.scale * 0.4, config.scale); 
+                playerGroup.position.y = -0.3; 
+                clearTimeout(duckTimeout);
+                duckTimeout = setTimeout(() => { 
+                    isDucking = false; 
+                    playerGroup.scale.set(config.scale, config.scale, config.scale); 
+                    playerGroup.position.y = 0; 
+                }, 800);
+            }
+        }
+
+        function setupEvents() {
+            // คีย์บอร์ด
+            document.addEventListener('keydown', (e) => {
+                if (!isGameRunning) return;
+                switch(e.code) {
+                    case 'ArrowLeft': case 'KeyA': moveLeft(); break;
+                    case 'ArrowRight': case 'KeyD': moveRight(); break;
+                    case 'ArrowUp': case 'KeyW': case 'Space': jump(); break;
+                    case 'ArrowDown': case 'KeyS': duck(); break;
+                }
+            });
+
+            // ปัดหน้าจอ
+            let touchStartX = 0, touchStartY = 0;
+            document.addEventListener('touchstart', e => { touchStartX = e.changedTouches[0].screenX; touchStartY = e.changedTouches[0].screenY; });
+            document.addEventListener('touchend', e => {
+                if (!isGameRunning) return;
+                let diffX = e.changedTouches[0].screenX - touchStartX, diffY = e.changedTouches[0].screenY - touchStartY;
+                if (Math.abs(diffX) > Math.abs(diffY)) {
+                    if (Math.abs(diffX) > 30) { if (diffX > 0) moveRight(); else moveLeft(); }
+                } else {
+                    if (Math.abs(diffY) > 30) { if (diffY < 0) jump(); else duck(); }
+                }
+            });
+
+            window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+
+            // UI Buttons
+            document.getElementById('start-btn').addEventListener('click', startGame);
+            document.getElementById('restart-btn').addEventListener('click', startGame);
+            document.getElementById('home-btn').addEventListener('click', goHome);
+
+            // ระบบเปิด-ปิด ห้อง Avatar
+            document.getElementById('go-avatar-btn').addEventListener('click', () => {
+                document.getElementById('start-screen').classList.add('hidden');
+                document.getElementById('avatar-screen').classList.remove('hidden');
+                isInAvatarRoom = true;
+                pedestal.visible = true; // เปิดแท่นยืน
+            });
+
+            document.getElementById('back-main-btn').addEventListener('click', () => {
+                document.getElementById('avatar-screen').classList.add('hidden');
+                document.getElementById('start-screen').classList.remove('hidden');
+                isInAvatarRoom = false;
+                pedestal.visible = false; // ซ่อนแท่นยืน
+            });
+
+            // ระบบเลือกตัวละคร (ปรับปรุงให้คลิกตัวที่ปลดล็อคใหม่ได้ทันที)
+            const avatarGrid = document.querySelector('.grid');
+            avatarGrid.addEventListener('click', (e) => {
+                const target = e.target.closest('button[data-char]');
+                if (!target) return;
+                
+                // ถ้าเป็นช้าง แต่เหรียญยังไม่ครบ 250 ให้กดยังไงก็ไม่ติด!
+                if (target.dataset.char === 'elephant' && totalCoins < 250) {
+                    return; 
+                }
+
+                // ลบสถานะเลือกจากทุกปุ่ม
+                document.querySelectorAll('button[data-char]').forEach(b => {
+                    b.classList.remove('selected', 'border-orange-500', 'bg-orange-50');
+                    // ใส่ขอบเทากลับให้ปุ่มปกติ (ยกเว้นปุ่มล็อค)
+                    if(b.id !== 'elephant-btn' || totalCoins >= 250) b.classList.add('border-gray-200');
+                });
+                
+                // แอดสถานะให้ปุ่มที่กด
+                target.classList.add('selected', 'border-orange-500', 'bg-orange-50');
+                target.classList.remove('border-gray-200');
+                
+                selectedChar = target.dataset.char;
+                document.getElementById('char-desc').innerText = CHAR_CONFIG[selectedChar].name;
+                
+                // อัปเดตโมเดลในฉาก
+                buildCharacter(selectedChar);
+            });
+        }
+
+        function startGame() {
+            AudioSys.init();
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('avatar-screen').classList.add('hidden'); // ปิดหน้า Avatar เผื่อไว้
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            
+            // จัดการเปิด/ปิด HUD ของช้าง (โชว์จำนวนครั้งที่ชนได้)
+            if (selectedChar === 'elephant') {
+                document.getElementById('smash-hud').classList.remove('hidden');
+                document.getElementById('smash-display').innerText = CHAR_CONFIG.elephant.maxSmash;
+            } else {
+                document.getElementById('smash-hud').classList.add('hidden');
+            }
+
+            isInAvatarRoom = false;
+            pedestal.visible = false; // ซ่อนแท่นยืนตอนเล่นเกม
+
+            // 👇 สิ่งที่พี่มิ้นเพิ่มให้! ล้างของเก่าทิ้งให้หมดเกลี้ยง จะได้ไม่เกิดบัคตายรัวๆ 👇
+            gameObjects.forEach(obj => scene.remove(obj.mesh)); 
+            gameObjects = [];
+            envObjects.forEach(obj => scene.remove(obj)); 
+            envObjects = [];
+
+            // รีเซ็ตตัวนับเวลาเกิดของใหม่ จะได้ไม่โผล่มาชนหน้าตอนเริ่มเกมทันที
+            spawnTimer = 0; 
+            coinPatternTimer = 0; 
+            treeSpawnTimer = 0;
+            // 👆 จบส่วนที่แก้ไข 👆
+            
+            score = 0; distance = 0; gameSpeed = BASE_SPEED;
+            currentLane = 0; targetX = 0;
+            playerGroup.position.set(0, 0, 0); playerGroup.rotation.set(0,0,0);
+            
+            // รีเซ็ตสเกลตามตัวละครเผื่อค้างตอนตาย
+            const cScale = CHAR_CONFIG[selectedChar].scale;
+            playerGroup.scale.set(cScale, cScale, cScale);
+
+            isJumping = false; isDucking = false; velocityY = 0; jumpCount = 0;
+            currentSmashCount = 0; // รีเซ็ตจำนวนที่พุ่งชนเวลาเริ่มเกมใหม่
+            
+            document.getElementById('score-display').innerText = score;
+            document.getElementById('distance-display').innerText = 0;
+            
+            isGameRunning = true; AudioSys.playBGM();
+        }
+
+        function goHome() {
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('start-screen').classList.remove('hidden');
+            updateHighScoreDisplay();
+            updateStatsDisplay();
+            
+            // ทำให้ตัวละครตั้งขึ้น
+            playerGroup.rotation.x = 0; 
+            playerGroup.position.y = 0;
+        }
+
+        function gameOver(obstacleType) {
+            isGameRunning = false; AudioSys.stopBGM(); AudioSys.playSound('crash');
+            
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.remove('hidden');
+            
+            let finalDist = Math.floor(distance);
+            document.getElementById('final-coins').innerText = score;
+            document.getElementById('final-dist').innerText = finalDist;
+            
+            // บันทึกเหรียญสะสมรวม 🪙
+            totalCoins += score;
+            localStorage.setItem('animalDashTotalCoins', totalCoins);
+            updateUnlockProgress(); // อัปเดตหลอดความคืบหน้าของช้างทันที
+            
+            // บันทึกสถิติสูงสุด
+            let isNewRecord = false;
+            if (score > bestScore) { bestScore = score; localStorage.setItem('animalDashBestScore', bestScore); isNewRecord = true; }
+            if (finalDist > bestDist) { bestDist = finalDist; localStorage.setItem('animalDashBestDist', bestDist); isNewRecord = true; }
+            
+            if(isNewRecord) document.getElementById('new-record-badge').classList.remove('hidden');
+            else document.getElementById('new-record-badge').classList.add('hidden');
+
+            if (obstacleType === 'rock') stats.rock++;
+            else if (obstacleType === 'pit') stats.pit++;
+            else if (obstacleType === 'vine') stats.vine++;
+
+            localStorage.setItem('animalDashStatsRock', stats.rock);
+            localStorage.setItem('animalDashStatsPit', stats.pit);
+            localStorage.setItem('animalDashStatsVine', stats.vine);
+            
+            updateStatsDisplay();
+
+            // ล้มลง
+            playerGroup.rotation.x = -Math.PI / 2;
+            playerGroup.position.y = 0.5; // ยกลอยนิดนึงไม่ให้จมดิน
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if (isGameRunning) {
+                gameSpeed += 0.0001; distance += (gameSpeed * 0.1);
+                
+                // อัปเดตแสงสี
+                updateDayNightCycle();
+
+                if (Math.floor(distance) % 5 === 0) document.getElementById('distance-display').innerText = Math.floor(distance);
+
+                // Lerp การเคลื่อนที่ซ้ายขวา
+                playerGroup.position.x += (targetX - playerGroup.position.x) * 0.15;
+                
+                // ระบบฟิสิกส์กระโดด
+                if (isJumping) {
+                    playerGroup.position.y += velocityY; 
+                    
+                    // คำนวณแรงโน้มถ่วงแยกตามประเภทตัวละคร (ไก่ร่อนช้า)
+                    const config = CHAR_CONFIG[selectedChar];
+                    const currentGravity = gravity * config.gravityScale;
+                    velocityY += currentGravity; 
+                    
+                    // เพิ่มแอนิเมชันกระพือปีกเฉพาะตอนไก่กระโดด
+                    if (playerGroup.userData.isChicken) {
+                        const time = Date.now() * 0.025;
+                        playerGroup.userData.wingL.rotation.z = Math.sin(time) * 0.5 - 0.2;
+                        playerGroup.userData.wingR.rotation.z = -(Math.sin(time) * 0.5 - 0.2);
+                    }
+
+                    if (playerGroup.position.y <= 0) { 
+                        playerGroup.position.y = 0; 
+                        isJumping = false; 
+                        jumpCount = 0; // ถึงพื้นแล้ว คืนสิทธิ์การกระโดด
+                        velocityY = 0; 
+                        
+                        // เอาปีกไก่ลงเมื่อถึงพื้น
+                        if (playerGroup.userData.isChicken) {
+                            playerGroup.userData.wingL.rotation.z = 0;
+                            playerGroup.userData.wingR.rotation.z = 0;
+                        }
+                    }
+                }
+                
+                playerGroup.rotation.z = -(targetX - playerGroup.position.x) * 0.1;
+
+                spawnTimer -= gameSpeed; coinPatternTimer -= gameSpeed; treeSpawnTimer -= gameSpeed;
+                
+                if (spawnTimer <= 0) { spawnObstacle(); spawnTimer = 20 + Math.random() * 20; }
+                if (coinPatternTimer <= 0) { spawnCoins(); coinPatternTimer = 50 + Math.random() * 40; }
+                if (treeSpawnTimer <= 0) { spawnTree(); treeSpawnTimer = 5 + Math.random() * 10; } 
+
+                // การเช็คชน (Collision) อิงตาม BoundingBox 
+                const playerBox = new THREE.Box3().setFromObject(playerGroup);
+                
+                // ปรับขอบเขต Hitbox ให้นุ่มนวลขึ้น
+                const boxWidth = playerBox.max.x - playerBox.min.x;
+                const boxDepth = playerBox.max.z - playerBox.min.z;
+                playerBox.min.x += boxWidth * 0.2; 
+                playerBox.max.x -= boxWidth * 0.2;
+                playerBox.min.z += boxDepth * 0.2; 
+                playerBox.max.z -= boxDepth * 0.2;
+                // หดความสูงลงนิดหน่อยให้รอดเถาวัลย์ง่ายขึ้นเวลาขนาดหมิ่นเหม่
+                playerBox.max.y -= 0.1; 
+
+                // อัปเดตสิ่งของ
+                for (let i = gameObjects.length - 1; i >= 0; i--) {
+                    const obj = gameObjects[i];
+                    obj.mesh.position.z -= gameSpeed;
+                    
+                    if (!obj.isObstacle) { 
+                        obj.mesh.rotation.y += obj.rotationSpeed; 
+                        obj.mesh.rotation.z += obj.rotationSpeed; 
+                    }
+                    
+                    const objBox = new THREE.Box3().setFromObject(obj.mesh);
+                    if (playerBox.intersectsBox(objBox)) {
+                        if (obj.isObstacle) { 
+                            // เช็คพลังความสามารถของช้าง (ชนหินและเถาวัลย์ได้)
+                            if (selectedChar === 'elephant' && (obj.type === 'rock' || obj.type === 'vine') && currentSmashCount < CHAR_CONFIG.elephant.maxSmash) {
+                                currentSmashCount++;
+                                document.getElementById('smash-display').innerText = CHAR_CONFIG.elephant.maxSmash - currentSmashCount;
+                                scene.remove(obj.mesh); 
+                                gameObjects.splice(i, 1);
+                                AudioSys.playSound('crash'); // เสียงชนของพัง
+                                
+                                // เพิ่มแอนิเมชันสั่นๆ ตอนชนนิดนึงเพื่ออรรถรส
+                                playerGroup.rotation.z = 0.2 * (Math.random() > 0.5 ? 1 : -1);
+                                setTimeout(() => { if(playerGroup) playerGroup.rotation.z = 0; }, 100);
+                                
+                                continue; // วิ่งต่อไปได้ชิลๆ!
+                            } else {
+                                gameOver(obj.type); 
+                                break; 
+                            }
+                        } 
+                        else {
+                            score++; document.getElementById('score-display').innerText = score;
+                            AudioSys.playSound('coin'); 
+                            scene.remove(obj.mesh); 
+                            gameObjects.splice(i, 1); 
+                            continue;
+                        }
+                    }
+                    if (obj.mesh.position.z < -10) { scene.remove(obj.mesh); gameObjects.splice(i, 1); }
+                }
+
+                // อัปเดตต้นไม้ประดับฉาก
+                for (let i = envObjects.length - 1; i >= 0; i--) {
+                    envObjects[i].position.z -= gameSpeed;
+                    if (envObjects[i].position.z < -10) { scene.remove(envObjects[i]); envObjects.splice(i, 1); }
+                }
+            }
+            
+            // หน้าเริ่มเกม ให้ตัวละครหมุนโชว์ความเท่
+            else if (!isGameRunning) {
+                if (playerGroup) {
+                    playerGroup.rotation.y += 0.015; // หมุนตัวตลอดเวลา
+                    
+                    if (isInAvatarRoom) {
+                        // แก้บัคแอบหลังจอ! แกนซ้ายคือ X ที่เป็นบวก (+)
+                        // หน้าจอคอม(>768px): ย้ายไปซ้าย (x=2.5), ดึงมาใกล้กล้องให้เห็นชัดๆ (z=-2)
+                        // หน้าจอมือถือ: อยู่ตรงกลาง (x=0), ดึงมาใกล้กล้องให้เห็นชัดๆ (z=-3)
+                        let targetAvatarX = window.innerWidth > 768 ? 2.5 : 0;
+                        let targetAvatarZ = window.innerWidth > 768 ? -2 : -3; 
+                        
+                        playerGroup.position.x += (targetAvatarX - playerGroup.position.x) * 0.1;
+                        playerGroup.position.z += (targetAvatarZ - playerGroup.position.z) * 0.1;
+                        
+                        // เลื่อนแท่นตามตัวละคร
+                        pedestal.position.x = playerGroup.position.x;
+                        pedestal.position.z = playerGroup.position.z;
+                    } else {
+                        // ถ้ากลับมาหน้า Start Screen ให้ตัวละครค่อยๆ เลื่อนกลับมาตรงกลาง
+                        playerGroup.position.x += (0 - playerGroup.position.x) * 0.1;
+                        playerGroup.position.z += (0 - playerGroup.position.z) * 0.1;
+                    }
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
